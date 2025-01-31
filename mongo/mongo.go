@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -32,4 +33,28 @@ func SaveMessageToDB(message models.Message) {
 		log.Fatalf("Failed to save message: %v", err)
 	}
 	fmt.Println("Message saved to MongoDB!")
+}
+
+// Get all messages from MongoDB
+func GetAllMessagesFromDB() ([]models.Message, error) {
+    var messages []models.Message
+    cursor, err := chatCollection.Find(context.Background(), bson.D{})
+    if err != nil {
+        return nil, fmt.Errorf("failed to retrieve messages: %v", err)
+    }
+    defer cursor.Close(context.Background())
+
+    for cursor.Next(context.Background()) {
+        var message models.Message
+        if err = cursor.Decode(&message); err != nil {
+            return nil, fmt.Errorf("failed to decode message: %v", err)
+        }
+        messages = append(messages, message)
+    }
+
+    if err = cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %v", err)
+    }
+
+    return messages, nil
 }

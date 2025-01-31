@@ -4,6 +4,7 @@ import (
 	"chat-app-server/models" // Import the models package
 	"chat-app-server/mongo"  // Import the mongo package
 	"chat-app-server/redis"  // Import the redis package
+	"encoding/json"
 	"log"
 	"net/http"
 	"sync"
@@ -36,6 +37,32 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	clients[conn] = true
 	mu.Unlock()
 
+	// Send stored messages to the newly connected client
+	messages, err := mongo.GetAllMessagesFromDB()
+	if err != nil {
+    	log.Println("Failed to retrieve messages:", err)
+	} else {
+   		for _, msg := range messages {
+        	messageData, err := json.Marshal(map[string]interface{}{
+            	"text":      msg.Text,
+            	"timestamp": msg.Timestamp,
+        })
+        if err != nil {
+            log.Println("Failed to marshal message:", err)
+            continue
+        }
+        if err := conn.WriteMessage(websocket.TextMessage, messageData); err != nil {
+            log.Println("Failed to send message:", err)
+            conn.Close()
+            mu.Lock()
+            delete(clients, conn)
+            mu.Unlock()
+            return
+        }
+    	}
+	}
+
+
 	// Listen for incoming messages from WebSocket clients
 	for {
 		messageType, message, err := conn.ReadMessage()
@@ -57,15 +84,23 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		mongo.SaveMessageToDB(msg) // Save to MongoDB
 
 		// Broadcast the message to all other connected clients
-		for client := range clients {
-			if err := client.WriteMessage(messageType, message); err != nil {
-				log.Println(err)
-				client.Close()
-				mu.Lock()
-				delete(clients, client)
-				mu.Unlock()
-			}
-		}
+    messageData, err := json.Marshal(map[string]interface{}{
+        "text":      msg.Text,
+        "timestamp": msg.Timestamp,
+    })
+    if err != nil {
+        log.Println("Failed to marshal message:", err)
+        continue
+    }
+    for client := range clients {
+        if err := client.WriteMessage(messageType, messageData); err != nil {
+            log.Println(err)
+            client.Close()
+            mu.Lock()
+            delete(clients, client)
+            mu.Unlock()
+        }
+    }
 
 		// Publish the message to Redis
 		redis.PublishMessage("chat-room-1", string(message))
