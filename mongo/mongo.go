@@ -9,10 +9,12 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var mongoClient *mongo.Client
 var chatCollection *mongo.Collection
+var userCollection *mongo.Collection
 
 // Setup MongoDB connection
 func SetupMongoDB() {
@@ -23,6 +25,7 @@ func SetupMongoDB() {
 	}
 	mongoClient = client
 	chatCollection = mongoClient.Database("chat-app-db").Collection("messages")
+	userCollection = mongoClient.Database("chat-app-db").Collection("users")
 	fmt.Println("Connected to MongoDB!")
 }
 
@@ -57,4 +60,31 @@ func GetAllMessagesFromDB() ([]models.Message, error) {
     }
 
     return messages, nil
+}
+
+// Save a user to MongoDB
+func SaveUserToDB(user models.User) error {
+	log.Println("Saving user to DB", user)
+    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+    if err != nil {
+        return fmt.Errorf("failed to hash password: %v", err)
+    }
+    user.Password = string(hashedPassword)
+
+    _, err = userCollection.InsertOne(context.Background(), user)
+    if err != nil {
+        return fmt.Errorf("failed to create user: %v", err)
+    }
+    return nil
+}
+
+// Find a user by username
+func FindUserByUsername(userID string) (models.User, error) {
+	log.Println("Finding user by username")
+    var user models.User
+    err := userCollection.FindOne(context.Background(), bson.M{"user_id": userID}).Decode(&user)
+    if err != nil {
+        return user, fmt.Errorf("user not found: %v", err)
+    }
+    return user, nil
 }
