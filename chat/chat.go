@@ -85,7 +85,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		    // Unmarshal the incoming message to extract the username and text
+		// Unmarshal the incoming message to extract the username and text
         var incomingMessage struct {
             Text     string `json:"text"`
             UserID string `json:"user_id"`
@@ -104,7 +104,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		}
 		mongo.SaveMessageToDB(msg) // Save to MongoDB
 
-		// Broadcast the message to all other connected clients
+	// Broadcast the message to all other connected clients
     messageData, err := json.Marshal(map[string]interface{}{
 		//Using the message struct to create a JSON object
 		"user_id": msg.UserID,
@@ -143,7 +143,7 @@ func StartServer() {
     mux := http.NewServeMux()
 
 	// Handle incoming WebSocket connections, publish messages to Redis and distribute messages to all connected clients
-	mux.HandleFunc("/ws", handleConnections)
+	mux.HandleFunc("/ws", middleware.VerifyJWT(http.HandlerFunc(handleConnections)).ServeHTTP)
 
 	// Handle user signup
 	mux.HandleFunc("/signup", auth.HandleSignup)
@@ -151,10 +151,10 @@ func StartServer() {
 	mux.HandleFunc("/login", auth.HandleLogin)
 	
 	handler := middleware.CORS(mux)
-	//Start goroutine, using multiple threads to listen for messages on the broadcast channel, each client has its own goroutine
+	// Start goroutine, using multiple threads to listen for messages on the broadcast channel, each client has its own goroutine
 	go func() {
 		for {
-			//For as long as the server is running, listen for messages on the broadcast channel and publish them to Redis
+			// For as long as the server is running, listen for messages on the broadcast channel and publish them to Redis
 			msg := <-broadcast
 			// Publish to Redis channel, chat-room-1 which currently does nothing else but in the future could be used to 
 			// distribute messages to multiple servers or for analytics if the prototype is scaled up

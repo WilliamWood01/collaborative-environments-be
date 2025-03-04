@@ -1,0 +1,11 @@
+package models
+
+import "github.com/dgrijalva/jwt-go"
+
+//Should be an ennvironment variable but adding it here for convenince sake in case you want to run the code
+var JwtKey = []byte("1b61b513969aede664a7c5d24269fd372b3b2cc3a31ef0ae001d234179994065365b116a74a2b5d0fdd56477a61f3cfa05def9b226c71a1a4f5572ec8205d1407e4bd5c4dd9fe9728848d597aefe44af7e0c9232f2d21f03e5a7f7e6073afb87f6deae4812ecbfc0d16f1ce1b7818797f4cdcfbf8c4d13df5b4392ae271ca3f359e094ac3ccde26e31467aa54697780b055b53273b3975a878b2702b9c7feb6c1f76d2ddcc132d1624ffa06ba56dc7ebdd6eadb54a08d6d7e377f50b6c87240f8708846ea1bda0f0a14b23b7ff59b33311d4a39df5862dbe37a3e741ff39ff74e3e015abe2be7ba11c6da1a75a1c73ab40645fade76c96f676773071125c1464")
+
+type Claims struct {
+    UserID string `json:"user_id"`
+    jwt.StandardClaims
+}
