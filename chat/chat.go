@@ -62,6 +62,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				"text":      msg.Text,
 				"timestamp": msg.Timestamp,
 				"file_id":   msg.FileID,
+				"file_name": msg.FileName,
+                "file_type": msg.FileType,
 			})
 			if err != nil {
 				log.Println("Failed to marshal message:", err)
@@ -94,6 +96,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			Text     string `json:"text"`
 			FileID   string `json:"file_id"`
 			FileData []byte `json:"file_data"`
+			FileName string `json:"file_name"`
+            FileType string `json:"file_type"`
 		}
 
 		if err := json.Unmarshal(message, &incomingMessage); err != nil {
@@ -103,7 +107,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 		if len(incomingMessage.FileData) > 0 {
 			// Save the file to GridFS and get the file ID
-			fileID, err := mongo.SaveFileToGridFS(incomingMessage.FileData) // Pass only the file data
+			fileID, err := mongo.SaveFileToGridFS(incomingMessage.FileData, incomingMessage.FileName, incomingMessage.FileType) // Pass file data, name, and type
 			if err != nil {
 				log.Println("Failed to save file:", err)
 				continue
@@ -119,6 +123,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			Text:      incomingMessage.Text,
 			Timestamp: time.Now(),
 			FileID:    incomingMessage.FileID, // Use the generated file ID
+			FileName:  incomingMessage.FileName,
+            FileType:  incomingMessage.FileType,
 		}
 		mongo.SaveMessageToDB(msg)
 
@@ -128,6 +134,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			"text":      msg.Text,
 			"timestamp": msg.Timestamp,
 			"file_id":   msg.FileID,
+			"file_name": msg.FileName,
+            "file_type": msg.FileType,
 		})
 		if err != nil {
 			log.Println("Failed to marshal message:", err)
@@ -153,18 +161,18 @@ func broadcastMessage(messageType int, messageData []byte) {
 
 // Handle file download requests
 func handleFileDownload(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	fileID := vars["fileID"]
+    vars := mux.Vars(r)
+    fileID := vars["fileID"]
 
-	fileData, err := mongo.GetFileFromGridFS(fileID)
-	if err != nil {
-		http.Error(w, "File not found", http.StatusNotFound)
-		return
-	}
+    fileData, fileName, fileType, err := mongo.GetFileFromGridFS(fileID)
+    if err != nil {
+        http.Error(w, "File not found", http.StatusNotFound)
+        return
+    }
 
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fileID))
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Write(fileData)
+    w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fileName))
+    w.Header().Set("Content-Type", fileType)
+    w.Write(fileData)
 }
 
 // Start the WebSocket server
@@ -179,7 +187,7 @@ func StartServer() {
 	// Handle incoming WebSocket connections, publish messages to Redis and distribute messages to all connected clients
 	router.HandleFunc("/ws", middleware.VerifyJWT(http.HandlerFunc(handleConnections)).ServeHTTP)
 	// Handle file download requests
-	router.HandleFunc("/files/{fileID}", handleFileDownload)
+	router.HandleFunc("/files/{fileID}", middleware.VerifyJWT(http.HandlerFunc(handleFileDownload)).ServeHTTP)
 
 	handler := middleware.CORS(router)
 	// Start goroutine, using multiple threads to listen for messages on the broadcast channel, each client has its own goroutine

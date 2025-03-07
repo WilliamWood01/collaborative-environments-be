@@ -1,12 +1,11 @@
 package mongo
 
 import (
-	"bytes"
 	"chat-app-server/models" // Import the models package
 	"context"
 	"fmt"
+	"io"
 	"log"
-	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -93,48 +92,58 @@ func FindUserByUsername(userID string) (models.User, error) {
 	return user, nil
 }
 
-func SaveFileToGridFS(data []byte) (string, error) {
-	bucket, err := gridfs.NewBucket(mongoClient.Database("chat-app-db"))
-	if err != nil {
-		return "", err
-	}
-
-	uploadStream, err := bucket.OpenUploadStream(fmt.Sprintf("%d", time.Now().UnixNano()))
-	if err != nil {
-		return "", err
-	}
-	defer uploadStream.Close()
-
-	_, err = uploadStream.Write(data)
-	if err != nil {
-		return "", err
-	}
-
-	return uploadStream.FileID.(primitive.ObjectID).Hex(), nil
-}
-
-// Get a file from GridFS
-func GetFileFromGridFS(fileID string) ([]byte, error) {
+func SaveFileToGridFS(fileData []byte, fileName string, fileType string) (string, error) {
     bucket, err := gridfs.NewBucket(mongoClient.Database("chat-app-db"))
     if err != nil {
-        return nil, err
+        return "", err
+    }
+
+    uploadStream, err := bucket.OpenUploadStream(fileName, options.GridFSUpload().SetMetadata(bson.M{"contentType": fileType}))
+    if err != nil {
+        return "", err
+    }
+    defer uploadStream.Close()
+
+    _, err = uploadStream.Write(fileData)
+    if err != nil {
+        return "", err
+    }
+
+    fileID := uploadStream.FileID.(primitive.ObjectID).Hex() // Convert ObjectID to string
+    return fileID, nil
+}
+
+func GetFileFromGridFS(fileID string) ([]byte, string, string, error) {
+    bucket, err := gridfs.NewBucket(mongoClient.Database("chat-app-db"))
+    if err != nil {
+        return nil, "", "", err
     }
 
     objectID, err := primitive.ObjectIDFromHex(fileID)
     if err != nil {
-        return nil, err
+        return nil, "", "", err
     }
 
-    var buf bytes.Buffer
     downloadStream, err := bucket.OpenDownloadStream(objectID)
     if err != nil {
-        return nil, err
+        return nil, "", "", err
     }
     defer downloadStream.Close()
 
-    if _, err := buf.ReadFrom(downloadStream); err != nil {
-        return nil, err
+    fileData, err := io.ReadAll(downloadStream)
+    if err != nil {
+        return nil, "", "", err
     }
 
-    return buf.Bytes(), nil
+    fileName := downloadStream.GetFile().Name
+    var metadata bson.M
+    if err := bson.Unmarshal(downloadStream.GetFile().Metadata, &metadata); err != nil {
+        return nil, "", "", err
+    }
+    fileType, ok := metadata["contentType"].(string)
+    if !ok {
+        fileType = "application/octet-stream" // Default to binary stream if content type is not found
+    }
+
+    return fileData, fileName, fileType, nil
 }

@@ -9,4 +9,6 @@ type Message struct {
 	Text      string    `json:"text" bson:"text"`
 	Timestamp time.Time `json:"timestamp" bson:"timestamp"`
 	FileID    string    `json:"file_id,omitempty" bson:"file_id,omitempty"`
+	FileName  string    `json:"file_name,omitempty" bson:"file_name,omitempty"`
+    FileType  string    `json:"file_type,omitempty" bson:"file_type,omitempty"`
 }
