@@ -1,13 +1,17 @@
 package mongo
 
 import (
+	"bytes"
 	"chat-app-server/models" // Import the models package
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/gridfs"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -40,51 +44,97 @@ func SaveMessageToDB(message models.Message) {
 
 // Get all messages from MongoDB
 func GetAllMessagesFromDB() ([]models.Message, error) {
-    var messages []models.Message
-    cursor, err := chatCollection.Find(context.Background(), bson.D{})
-    if err != nil {
-        return nil, fmt.Errorf("failed to retrieve messages: %v", err)
-    }
-    defer cursor.Close(context.Background())
+	var messages []models.Message
+	cursor, err := chatCollection.Find(context.Background(), bson.D{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve messages: %v", err)
+	}
+	defer cursor.Close(context.Background())
 
-    for cursor.Next(context.Background()) {
-        var message models.Message
-        if err = cursor.Decode(&message); err != nil {
-            return nil, fmt.Errorf("failed to decode message: %v", err)
-        }
-        messages = append(messages, message)
-    }
+	for cursor.Next(context.Background()) {
+		var message models.Message
+		if err = cursor.Decode(&message); err != nil {
+			return nil, fmt.Errorf("failed to decode message: %v", err)
+		}
+		messages = append(messages, message)
+	}
 
-    if err = cursor.Err(); err != nil {
+	if err = cursor.Err(); err != nil {
 		return nil, fmt.Errorf("cursor error: %v", err)
-    }
+	}
 
-    return messages, nil
+	return messages, nil
 }
 
 // Save a user to MongoDB
 func SaveUserToDB(user models.User) error {
 	log.Println("Saving user to DB", user)
-    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-    if err != nil {
-        return fmt.Errorf("failed to hash password: %v", err)
-    }
-    user.Password = string(hashedPassword)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %v", err)
+	}
+	user.Password = string(hashedPassword)
 
-    _, err = userCollection.InsertOne(context.Background(), user)
-    if err != nil {
-        return fmt.Errorf("failed to create user: %v", err)
-    }
-    return nil
+	_, err = userCollection.InsertOne(context.Background(), user)
+	if err != nil {
+		return fmt.Errorf("failed to create user: %v", err)
+	}
+	return nil
 }
 
 // Find a user by username
 func FindUserByUsername(userID string) (models.User, error) {
 	log.Println("Finding user by username")
-    var user models.User
-    err := userCollection.FindOne(context.Background(), bson.M{"user_id": userID}).Decode(&user)
+	var user models.User
+	err := userCollection.FindOne(context.Background(), bson.M{"user_id": userID}).Decode(&user)
+	if err != nil {
+		return user, fmt.Errorf("user not found: %v", err)
+	}
+	return user, nil
+}
+
+func SaveFileToGridFS(data []byte) (string, error) {
+	bucket, err := gridfs.NewBucket(mongoClient.Database("chat-app-db"))
+	if err != nil {
+		return "", err
+	}
+
+	uploadStream, err := bucket.OpenUploadStream(fmt.Sprintf("%d", time.Now().UnixNano()))
+	if err != nil {
+		return "", err
+	}
+	defer uploadStream.Close()
+
+	_, err = uploadStream.Write(data)
+	if err != nil {
+		return "", err
+	}
+
+	return uploadStream.FileID.(primitive.ObjectID).Hex(), nil
+}
+
+// Get a file from GridFS
+func GetFileFromGridFS(fileID string) ([]byte, error) {
+    bucket, err := gridfs.NewBucket(mongoClient.Database("chat-app-db"))
     if err != nil {
-        return user, fmt.Errorf("user not found: %v", err)
+        return nil, err
     }
-    return user, nil
+
+    objectID, err := primitive.ObjectIDFromHex(fileID)
+    if err != nil {
+        return nil, err
+    }
+
+    var buf bytes.Buffer
+    downloadStream, err := bucket.OpenDownloadStream(objectID)
+    if err != nil {
+        return nil, err
+    }
+    defer downloadStream.Close()
+
+    if _, err := buf.ReadFrom(downloadStream); err != nil {
+        return nil, err
+    }
+
+    return buf.Bytes(), nil
 }

@@ -5,10 +5,12 @@ go 1.23.5
 require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/gorilla/websocket v1.5.3
-	go.mongodb.org/mongo-driver v1.17.2
+	go.mongodb.org/mongo-driver v1.17.3
 )
 
-require github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
+require github.com/dgrijalva/jwt-go v3.2.0+incompatible
+
+require github.com/gorilla/mux v1.8.1
 
 require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect

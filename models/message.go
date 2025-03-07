@@ -8,4 +8,5 @@ type Message struct {
 	RoomID    string    `json:"room_id" bson:"room_id"`
 	Text      string    `json:"text" bson:"text"`
 	Timestamp time.Time `json:"timestamp" bson:"timestamp"`
+	FileID    string    `json:"file_id,omitempty" bson:"file_id,omitempty"`
 }
