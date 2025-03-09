@@ -8,6 +8,8 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
+// This file can effectively be igonred as it does not do anything at the moment
+
 var redisClient *redis.Client
 var ctx = context.Background()
 

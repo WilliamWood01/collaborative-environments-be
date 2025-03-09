@@ -13,7 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// HandleSignup handles user signup
+// Function to handle user signup
 func HandleSignup(w http.ResponseWriter, r *http.Request) {
 	log.Println("Handling signup request")
 
@@ -44,7 +44,7 @@ func HandleSignup(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
-// HandleLogin handles user login
+// Function to handle user login
 func HandleLogin(w http.ResponseWriter, r *http.Request) {
 	log.Println("Handling login request", r.Body)
 	var user models.User
@@ -63,6 +63,7 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Compare the hashed password with the provided one
 	log.Println("Found user:", foundUser)
 	if err := bcrypt.CompareHashAndPassword([]byte(foundUser.Password), []byte(user.Password)); err != nil {
 		log.Println("Invalid password:", err)

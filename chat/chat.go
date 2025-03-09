@@ -16,14 +16,17 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/petermattis/goid"
 )
 
+// Create a map to store connected clients, a map is a collection of key-value pairs, in this case, the key is a WebSocket connection and the value is a boolean
+// Proected by a mutex when used
 var clients = make(map[*websocket.Conn]bool)
 
 // Creates a broadcast channel to distribute messages to all connected clients, a channel is a communication mechanism that allows one goroutine to send values to another goroutine
 var broadcast = make(chan string)
 
-// Create a mutex to synchronize access to the clients map, mutex a mutual exclusion lock, used to synchronize access to shared resources
+// Create a mutex to synchronize access to the clients map
 var mu sync.Mutex
 
 // Handle incoming WebSocket connections, remains running for as long as the individual client is connected
@@ -39,13 +42,19 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		return
 	}
+	
+	// Get the goroutine ID to prove that each client has its own goroutine, 
+	// therefore handling multiple clients concurrently via multi-threading 
+	goroutineID := goid.Get()
+	log.Printf("New WebSocket connection established: %s (goroutine ID: %d)", conn.RemoteAddr().String(), goroutineID)
 
-	log.Printf("New WebSocket connection established: %s", conn.RemoteAddr().String())
+	// Defer is a function that is executed when the surrounding function returns, ie. when the client disconnects
+	defer func() {
+        log.Printf("WebSocket connection closed: %s (goroutine ID: %d)", conn.RemoteAddr().String(), goroutineID)
+        conn.Close()
+    }()
 
-	//Defer is a function that is executed when the surrounding function returns, ie. when the client disconnects
-	defer conn.Close()
-
-	// Register the client
+	// Register the client while the mutual exclusion locking mechanism is in place
 	mu.Lock()
 	clients[conn] = true
 	mu.Unlock()
@@ -55,6 +64,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println("Failed to retrieve messages:", err)
 	} else {
+		// Write all messages saved in the database to the client by looping through the retrieved messages
 		for _, msg := range messages {
 			messageData, err := json.Marshal(map[string]interface{}{
 				//Using the message struct to create a JSON object
@@ -82,6 +92,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	// Listen for incoming messages from WebSocket clients
 	for {
+		// Read the message from the client
 		_, message, err := conn.ReadMessage()
 		if err != nil {
 			log.Println(err)
@@ -105,6 +116,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		// If the incoming message contains file data
 		if len(incomingMessage.FileData) > 0 {
 			// Save the file to GridFS and get the file ID
 			fileID, err := mongo.SaveFileToGridFS(incomingMessage.FileData, incomingMessage.FileName, incomingMessage.FileType) // Pass file data, name, and type
@@ -148,7 +160,9 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 // Function to broadcast a message to all connected clients
 func broadcastMessage(messageType int, messageData []byte) {
+	//Lock while broadcasting to clients
 	mu.Lock()
+	//Unlock after broadcasting
 	defer mu.Unlock()
 	for client := range clients {
 		if err := client.WriteMessage(messageType, messageData); err != nil {
@@ -170,6 +184,7 @@ func handleFileDownload(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+	// Return the file to the client
     w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fileName))
     w.Header().Set("Content-Type", fileType)
     w.Write(fileData)
@@ -197,6 +212,7 @@ func StartServer() {
 			msg := <-broadcast
 			// Publish to Redis channel, chat-room-1 which currently does nothing else but in the future could be used to
 			// distribute messages to multiple servers or for analytics if the prototype is scaled up
+			// Comment out if not using redis
 			redis.PublishMessage("chat-room-1", msg)
 
 		}

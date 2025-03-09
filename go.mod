@@ -12,6 +12,8 @@ require github.com/dgrijalva/jwt-go v3.2.0+incompatible
 
 require github.com/gorilla/mux v1.8.1
 
+require github.com/petermattis/goid v0.0.0-20250303134427-723919f7f203
+
 require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect

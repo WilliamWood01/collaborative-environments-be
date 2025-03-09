@@ -21,12 +21,14 @@ var userCollection *mongo.Collection
 
 // Setup MongoDB connection
 func SetupMongoDB() {
+	//Set up the MongoDB client
 	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
 	client, err := mongo.Connect(context.Background(), clientOptions)
 	if err != nil {
 		log.Fatalf("Failed to connect to MongoDB: %v", err)
 	}
 	mongoClient = client
+	//Initialize each collection in the database
 	chatCollection = mongoClient.Database("chat-app-db").Collection("messages")
 	userCollection = mongoClient.Database("chat-app-db").Collection("users")
 	fmt.Println("Connected to MongoDB!")
@@ -34,6 +36,7 @@ func SetupMongoDB() {
 
 // Save a message to MongoDB
 func SaveMessageToDB(message models.Message) {
+	//Insert the message into the collection
 	_, err := chatCollection.InsertOne(context.Background(), message)
 	if err != nil {
 		log.Fatalf("Failed to save message: %v", err)
@@ -41,7 +44,7 @@ func SaveMessageToDB(message models.Message) {
 	fmt.Println("Message saved to MongoDB!")
 }
 
-// Get all messages from MongoDB
+// Get all stored messages from MongoDB
 func GetAllMessagesFromDB() ([]models.Message, error) {
 	var messages []models.Message
 	cursor, err := chatCollection.Find(context.Background(), bson.D{})
@@ -50,6 +53,7 @@ func GetAllMessagesFromDB() ([]models.Message, error) {
 	}
 	defer cursor.Close(context.Background())
 
+	// Iterate through the cursor and decode each message
 	for cursor.Next(context.Background()) {
 		var message models.Message
 		if err = cursor.Decode(&message); err != nil {
@@ -68,12 +72,14 @@ func GetAllMessagesFromDB() ([]models.Message, error) {
 // Save a user to MongoDB
 func SaveUserToDB(user models.User) error {
 	log.Println("Saving user to DB", user)
+	// Hash the password before saving it to the database
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %v", err)
 	}
 	user.Password = string(hashedPassword)
 
+	// Insert the user into the collection
 	_, err = userCollection.InsertOne(context.Background(), user)
 	if err != nil {
 		return fmt.Errorf("failed to create user: %v", err)
@@ -85,6 +91,7 @@ func SaveUserToDB(user models.User) error {
 func FindUserByUsername(userID string) (models.User, error) {
 	log.Println("Finding user by username")
 	var user models.User
+	// Find the user by username and decode it
 	err := userCollection.FindOne(context.Background(), bson.M{"user_id": userID}).Decode(&user)
 	if err != nil {
 		return user, fmt.Errorf("user not found: %v", err)
@@ -92,6 +99,7 @@ func FindUserByUsername(userID string) (models.User, error) {
 	return user, nil
 }
 
+// Function to save a file to GridFS
 func SaveFileToGridFS(fileData []byte, fileName string, fileType string) (string, error) {
     bucket, err := gridfs.NewBucket(mongoClient.Database("chat-app-db"))
     if err != nil {
@@ -113,12 +121,14 @@ func SaveFileToGridFS(fileData []byte, fileName string, fileType string) (string
     return fileID, nil
 }
 
+// Function to get a file from GridFS
 func GetFileFromGridFS(fileID string) ([]byte, string, string, error) {
     bucket, err := gridfs.NewBucket(mongoClient.Database("chat-app-db"))
     if err != nil {
         return nil, "", "", err
     }
 
+	// Convert the file ID string to an ObjectID
     objectID, err := primitive.ObjectIDFromHex(fileID)
     if err != nil {
         return nil, "", "", err
@@ -135,6 +145,7 @@ func GetFileFromGridFS(fileID string) ([]byte, string, string, error) {
         return nil, "", "", err
     }
 
+	// Assign file name and content type from the file metadata
     fileName := downloadStream.GetFile().Name
     var metadata bson.M
     if err := bson.Unmarshal(downloadStream.GetFile().Metadata, &metadata); err != nil {

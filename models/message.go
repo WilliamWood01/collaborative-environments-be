@@ -2,6 +2,7 @@ package models
 
 import "time"
 
+// Strcuture for messages in the database and JSON responses
 type Message struct {
 	ID        string    `json:"id" bson:"_id,omitempty"`
 	UserID    string    `json:"user_id" bson:"user_id"`
